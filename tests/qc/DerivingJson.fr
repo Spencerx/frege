@@ -1,0 +1,213 @@
+--- Test properties of the From/ToJSON of the 'Compiler.passes.Instances' module
+module tests.qc.DerivingJson where
+
+import frege.Prelude hiding(Object, !!)
+import frege.prelude.PreludeList(intersperse)
+
+import Test.QuickCheck as Q public
+import Data.JSON(FromJSON, ToJSON)
+
+-- Positional arguments constructor
+data Pos = Pos Int Char
+
+deriving Eq Pos
+deriving FromJSON Pos
+deriving ToJSON Pos
+
+p_ShouldReadValidJSONForPosCtor = once $
+    let
+      json     = "{ \"Pos\": [0, \"0\"] }"
+      expected = Pos 0 '0'
+      result   = parseJSON json
+    in
+      (Right expected) == result
+
+p_ShouldGenerateCorrectInstancesForPosCtor = property $ \(a :: Int, b :: Char) -> 
+  let 
+    x = Pos a b
+  in 
+    (Right x) == (fromJSON . toJSON) x
+
+-- Record field constructor
+
+data Rec = Rec { a :: Int, b :: Char }
+
+deriving Eq Rec
+deriving FromJSON Rec
+deriving ToJSON Rec
+
+p_ShouldReadValidJSONForRecCtor = once $
+    let
+      json     = "{ \"a\": 0, \"b\": \"0\" }"
+      expected = Rec 0 '0'
+      result = parseJSON json
+    in
+      (Right expected) == result
+
+p_ShouldGenerateCorrectInstancesForRecCtor = property $ \(a :: Int, b :: Char) -> 
+  let 
+    x = Rec a b
+  in 
+    (Right x) == (fromJSON . toJSON) x
+
+
+-- Optional fields
+
+data Rec' = Rec' { a :: Maybe Int, b :: Char }
+
+deriving FromJSON Rec'
+deriving Eq Rec'
+deriving Show Rec'
+
+data Pos' = Pos' (Maybe Int) Int
+
+deriving FromJSON Pos'
+deriving Eq Pos'
+deriving Show Pos'
+
+p_ShouldCorrectlyHandleMissingFieldsForPosCtor = once $
+    let
+      json     = "{ \"Pos'\": [null, 0] }"
+      expected = (Pos' Nothing 0)
+      result = parseJSON json
+    in
+      (Right expected) == result
+
+p_ShouldCorrectlyHandleOptionalFieldsForPosCtor = once $
+    let
+      json     = "{ \"Pos'\": [0, 0] }"
+      expected = Pos' (Just 0) 0
+      result = parseJSON json
+    in
+      (Right expected) == result
+
+p_ShouldCorrectlyHandleMissingFieldsForRecCtor = once $
+    let
+      json     = "{ \"b\": \"0\" }"
+      expected = Rec' Nothing '0'
+      result = parseJSON json
+    in
+      (Right expected) == result
+
+p_ShouldCorrectlyHandleOptionalFieldsForRecCtor = once $
+    let
+      json     = "{ \"a\": 0, \"b\": \"0\" }"
+      expected = Rec' (Just 0) '0'
+      result = parseJSON json
+    in
+      (Right expected) == result
+
+-- Multiple Ctors
+data Mltp = Mltp1 { a :: Int, b :: String } | Mltp2 { c :: String, d :: Int }
+deriving Eq Mltp
+deriving FromJSON Mltp
+deriving ToJSON Mltp
+
+data Mltp' = Mltp'1 Int String | Mltp'2 String Int
+deriving Eq Mltp'
+deriving FromJSON Mltp'
+deriving ToJSON Mltp'
+
+p_ShouldCorrectlyParseMultipleCtors = once $
+    let
+      jsonCtr1     = "{ \"case\": \"Mltp1\", \"a\": 0, \"b\": \"\" }"
+      jsonCtr2     = "{ \"case\": \"Mltp2\", \"c\" : \"\", \"d\": 0 }"
+      expected1 = Mltp1 0 ""
+      expected2 = Mltp2 "" 0
+      res1 = parseJSON jsonCtr1
+      res2 = parseJSON jsonCtr2
+    in
+      (Right expected1) == res1 &&
+      (Right expected2) == res2
+
+p_ShouldCorrectlyHandleMultipleCtors = property $ \(a, b) ->
+    let
+      ctrs = [Mltp1 a b, Mltp2 b a]
+      res  = (fromJSON . toJSON) ctrs
+    in
+      (Right ctrs) == res
+
+p_ShouldCorrectlyParseMultiplePosCtors = once $
+    let
+      jsonCtr1     = "{ \"case\": \"Mltp'1\", \"Mltp'1\": [0, \"\"] }"
+      jsonCtr2     = "{ \"case\": \"Mltp'2\", \"Mltp'2\": [\"\", 0 ] }"
+      expected1 = Mltp'1 0 ""
+      expected2 = Mltp'2 "" 0
+      res1 = parseJSON jsonCtr1
+      res2 = parseJSON jsonCtr2
+    in
+      (Right expected1) == res1 &&
+      (Right expected2) == res2
+
+p_ShouldCorrectlyHandleMultiplePosCtors = property $ \(a, b) ->
+    let
+      ctrs = [Mltp'1 a b, Mltp'2 b a]
+      res  = (fromJSON . toJSON) ctrs
+    in
+      (Right ctrs) == res
+
+-- Edge cases
+
+-- The unit type
+data U = U ()
+deriving Eq U
+deriving FromJSON U
+deriving ToJSON U
+
+p_ShouldReadValidJSONForUnitType = once $
+    let
+      json     = "{ \"U\": [] }"
+      expected = U ()
+      result = parseJSON json
+    in
+      (Right expected) == result
+
+-- See definition at data/JSON.fr
+data Maybe' a = Just' a | Nothing'
+deriving Eq a => Eq (Maybe' a)
+deriving FromJSON a => FromJSON (Maybe' a)
+deriving ToJSON a => ToJSON (Maybe' a)
+
+p_ShouldReadValidJSONForNonFieldCtor = once $
+    let
+      x   = "{ \"case\": \"Nothing'\", \"Nothing'\": null }"
+      expected = Nothing' :: Maybe' Int
+      res = parseJSON x
+    in
+      (Right expected) == res
+
+p_ShouldCreateValidJSONForNonFieldCtor = Q.morallyDubiousIOProperty $
+    let
+      x   = "{\"case\" : \"Nothing'\", \"Nothing'\" : null}"
+      res = toJSON (Nothing' :: Maybe' Int)
+    in do
+      println res
+      pure $ x == show res
+
+p_ShouldCorrectlyHandleNonFieldCtor = once $
+    let
+      x   = Nothing' :: Maybe' Int
+      res = (fromJSON . toJSON) x
+    in
+      (Right x) == res
+
+-- `{ "CtorName": [0,1,2] }` since it is ambiguous: 
+-- it matches the Ctor `CtorName [Int]` and the Ctor `CtorName Int Int Int`. 
+-- We already tested the latter case above. The following code tests the former
+
+data SinglePos = SinglePos [Int]
+
+deriving Show SinglePos
+deriving Eq SinglePos
+deriving FromJSON SinglePos
+deriving ToJSON SinglePos
+
+p_ShouldReadValidJSONForSingleArgPosCtor = property $ \(as :: [Int]) ->
+    let
+      nrs      = (foldr (++) "" . intersperse "," . map show) as
+      json     = "{ \"SinglePos\": [" ++ nrs ++ "]}"
+      expected = SinglePos as
+      result   = parseJSON json
+    in
+      (Right expected) == result
+
