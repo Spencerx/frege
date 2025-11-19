@@ -20,11 +20,9 @@
 
     ## Encoding of algebraic data types in JSON
 
-    The following suggestions will foster a compact and easy to decode
-    'String' representation of Frege data.
-
-    (There is currently no support for automatically derived instances yet,
-    but when it gets implemented it shall comply with this suggestions.)
+    The following suggestions will foster a compact and easy to decode 'String'
+    representation of Frege data. Derived instances for FromJSON/ToJSON comply
+    with them:
 
     - 'Bool', numbers, 'String': @true@, @false@, _number_, "_string_"
     - a 'Char' _c_ will be encoded as JSON string "_c_"
